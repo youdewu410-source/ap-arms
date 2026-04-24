@@ -18,7 +18,7 @@ tz = pytz.timezone('Asia/Taipei')
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-1.5-flash') # 使用 Flash 以確保回覆速度
+model = genai.GenerativeModel('gemini-1.5-flash-latest') # 使用 Flash 以確保回覆速度
 
 def get_gspread_client():
     creds_dict = json.loads(os.getenv('GOOGLE_CREDENTIALS'))
