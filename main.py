@@ -96,8 +96,8 @@ def handle_text_message(event):
 # --- 4. 功能模組實作 ---
 
 def process_word_investment(event, word):
-    prompt = f"{SYSTEM_PROMPT}\n標的單字：{word}。請產生一個台大物理入學水準的學術例句，並提供挖空的克漏字版本。格式：{{\"sentence\": \"...\", \"cloze\": \"...\", \"warn\": \"...\"}}"
-    
+   line_bot_api.reply_message(event.reply_token, TextSendMessage(text="[DEBUG] 新版程式已生效"))
+    return
     response = model.generate_content(prompt)
     raw_text = response.text.strip()
     
