@@ -18,7 +18,19 @@ tz = pytz.timezone('Asia/Taipei')
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-3-flash')
+try:
+    # 獲取該 API Key 權限下所有可用的模型列表
+    models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    # 優先排序：3.1 > 3 > 2.0 > 1.5
+    target = next((m for m in models if 'gemini-3.1-flash' in m),
+             next((m for m in models if 'gemini-3-flash' in m),
+             next((m for m in models if 'gemini-2.0-flash' in m),
+             next((m for m in models if 'gemini-1.5-flash' in m), models[0]))))
+    model = genai.GenerativeModel(target)
+    print(f"系統已成功掛載最佳腦核: {target}")
+except Exception as e:
+    # 若連列表都抓不到，強制使用全局標籤
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 def get_gspread_client():
     creds_dict = json.loads(os.getenv('GOOGLE_CREDENTIALS'))
