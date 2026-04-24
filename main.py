@@ -1,7 +1,6 @@
 import os
 import json
 import uuid
-import re
 from datetime import datetime, timedelta
 import pytz
 from fastapi import FastAPI, Request, HTTPException
@@ -37,22 +36,11 @@ def get_gspread_client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     return gspread.authorize(creds)
 
-# --- 核心提取工具：解決 Extra Data 報錯 ---
-def extract_json(text):
-    decoder = json.JSONDecoder()
-    for i, ch in enumerate(text):
-        if ch == '{':
-            try:
-                obj, _ = decoder.raw_decode(text, i)
-                return obj
-            except json.JSONDecodeError:
-                continue
-    raise ValueError("回傳內容中找不到合法 JSON 結構")
-
 SYSTEM_PROMPT = """
 你現在是「AP-ARMS」的核心 AI，人設為「極度冷酷的數據分析師」。
-使用者目標：台大物理系、台北套房。
-輸出規範：當要求 JSON 時，僅輸出 JSON 字串本身，嚴禁使用 ```json 等 Markdown 語法。
+使用者目標：考上台大物理系。
+任務：針對使用者提供的單字，生成符合台大物理系水準的例句。
+輸出規範：嚴格遵守 JSON 格式，包含 sentence (例句), cloze (克漏字), warn (冷酷警告)。
 """
 
 EBBINGHAUS_INTERVALS = [1, 2, 4, 7, 15]
@@ -92,11 +80,18 @@ def handle_text_message(event):
 # --- 功能模組實作 ---
 
 def process_word_investment(event, word):
-    prompt = f"{SYSTEM_PROMPT}\n標的單字：{word}。請產生一個台大物理入學水準的學術例句，並提供挖空的克漏字版本。格式：{{\"sentence\": \"...\", \"cloze\": \"...\", \"warn\": \"...\"}}"
-    response = model.generate_content(prompt)
+    prompt = f"{SYSTEM_PROMPT}\n標的單字：{word}。請以此格式回傳：{{\"sentence\": \"...\", \"cloze\": \"...\", \"warn\": \"...\"}}"
     
-    # 核心：使用 raw_decode 強制截斷雜訊
-    res_data = extract_json(response.text.strip())
+    try:
+        # 核心防護：啟用 Google 原生 JSON 模式，強制鎖死輸出格式
+        response = model.generate_content(
+            prompt,
+            generation_config={"response_mime_type": "application/json"}
+        )
+        res_data = json.loads(response.text)
+    except Exception as e:
+        # 萬一連 Google 原生機制都崩潰，印出到底回傳了什麼鬼東西
+        raise ValueError(f"AI 格式徹底崩潰，原始回傳：{response.text[:100]}")
     
     client = get_gspread_client()
     sheet = client.open_by_key(os.getenv('SPREADSHEET_ID')).worksheet("Words_Asset")
