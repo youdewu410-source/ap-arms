@@ -101,10 +101,17 @@ def handle_text_message(event):
 
 def process_word_investment(event, word):
     """模組一：單字注資與 AI 例句生成"""
-    prompt = f"{SYSTEM_PROMPT}\n標的單字：{word}。請產生一個台大物理入學水準的學術例句，並提供挖空的克漏字版本。請回傳純 JSON: {{\"sentence\": \"...\", \"cloze\": \"...\", \"warn\": \"一句冷酷的話\"}}"
+    prompt = f"{SYSTEM_PROMPT}\n標的單字：{word}。請產生一個台大物理入學水準的學術例句，並提供挖空的克漏字版本。請務必只回傳純 JSON，不要包含任何 Markdown 標籤或額外文字。格式如下：{{\"sentence\": \"...\", \"cloze\": \"...\", \"warn\": \"...\"}}"
     
     response = model.generate_content(prompt)
-    res_data = json.loads(response.text.replace("```json", "").replace("```", "").strip())
+    # --- 新增：強效雜訊過濾器 ---
+    raw_text = response.text.strip()
+    if "{" in raw_text and "}" in raw_text:
+        # 提取第一個 { 到最後一個 } 之間的內容
+        raw_text = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+    
+    res_data = json.loads(raw_text)
+    # ... (後續原本的 append_row 程式碼保持不變)
     
     client = get_gspread_client()
     sheet = client.open_by_key(os.getenv('SPREADSHEET_ID')).worksheet("Words_Asset")
