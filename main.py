@@ -45,6 +45,19 @@ SYSTEM_PROMPT = """
 
 EBBINGHAUS_INTERVALS = [1, 2, 4, 7, 15]
 
+# --- JSON 提取工具函式（修正核心）---
+def extract_json(text):
+    """從 AI 回傳的任意文字中，安全提取第一個合法 JSON 物件。"""
+    decoder = json.JSONDecoder()
+    for i, ch in enumerate(text):
+        if ch == '{':
+            try:
+                obj, _ = decoder.raw_decode(text, i)
+                return obj
+            except json.JSONDecodeError:
+                continue
+    raise ValueError("回傳內容中找不到合法 JSON 結構")
+
 @app.post("/callback")
 async def callback(request: Request):
     signature = request.headers.get('X-Line-Signature')
@@ -88,13 +101,8 @@ def process_word_investment(event, word):
     response = model.generate_content(prompt)
     raw_text = response.text.strip()
     
-    # 強效 JSON 提取與清洗邏輯
-    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-    if not match:
-        raise ValueError("AI 回傳內容不含 JSON 結構")
-    
-    clean_json = match.group(0).replace('\n', ' ').replace('\r', '')
-    res_data = json.loads(clean_json)
+    # 修正：使用 raw_decode 安全提取第一個合法 JSON，不受多餘資料或巢狀括號干擾
+    res_data = extract_json(raw_text)
     
     client = get_gspread_client()
     sheet = client.open_by_key(os.getenv('SPREADSHEET_ID')).worksheet("Words_Asset")
@@ -162,7 +170,14 @@ def process_quiz_answer(event, answer):
     if answer.lower() == str(target['Vocabulary']).lower():
         rev_count = int(target.get('Review_Count', 0)) + 1
         status = "Active" if rev_count <= len(EBBINGHAUS_INTERVALS) else "Completed"
-        next_ts = int((datetime.now(tz) + timedelta(days=EBBINGHAUS_INTERVALS[rev_count-1])).timestamp()) if status == "Active" else now_ts
+
+        # 修正：加上邊界保護，防止 Review_Count 異常時 IndexError
+        if status == "Active":
+            interval_idx = min(rev_count - 1, len(EBBINGHAUS_INTERVALS) - 1)
+            next_ts = int((datetime.now(tz) + timedelta(days=EBBINGHAUS_INTERVALS[interval_idx])).timestamp())
+        else:
+            next_ts = now_ts
+
         sheet.update_cell(row_idx, 6, rev_count)
         sheet.update_cell(row_idx, 7, next_ts)
         sheet.update_cell(row_idx, 9, status)
