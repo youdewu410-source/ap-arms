@@ -73,7 +73,7 @@ def process_word_investment(event, word):
     
     # --- 裸連協議：徹底拔除 Google SDK，直接發送底層請求 ---
     api_key = os.getenv('GEMINI_API_KEY')
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
     data = {
         "contents": [{"parts": [{"text": prompt}]}],
