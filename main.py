@@ -75,15 +75,14 @@ def process_word_investment(event, word):
     prompt = f"{SYSTEM_PROMPT}\n標的單字：{word}。請以此格式回傳：{{\"sentence\": \"...\", \"cloze\": \"...\", \"warn\": \"...\"}}"
     
     try:
-        # 核心防護：啟用 Google 原生 JSON 模式，強制鎖死輸出格式
         response = model.generate_content(
             prompt,
             generation_config={"response_mime_type": "application/json"}
         )
         res_data = json.loads(response.text)
     except Exception as e:
-        # 萬一連 Google 原生機制都崩潰，印出到底回傳了什麼鬼東西
-        raise ValueError(f"AI 格式徹底崩潰，原始回傳：{response.text[:100]}")
+        # 修正：直接印出底層 API 傳來的真實錯誤，不再呼叫不存在的 response
+        raise ValueError(f"AI 核心呼叫失敗，真實錯誤碼：{str(e)}")
     
     client = get_gspread_client()
     sheet = client.open_by_key(os.getenv('SPREADSHEET_ID')).worksheet("Words_Asset")
@@ -98,6 +97,7 @@ def process_word_investment(event, word):
     
     reply = f"【資產注資成功】\n標的物：{word}\n\n例句：{res_data['sentence']}\n\n系統提示：{res_data.get('warn', '無警告')}"
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+   
 
 def process_progress_report(event, progress_text, maintenance_status):
     client = get_gspread_client()
