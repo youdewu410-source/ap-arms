@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 line-bot-sdk
-google-generativeai
+google-generativeai>=0.8.3
 gspread
 oauth2client
 pytz
