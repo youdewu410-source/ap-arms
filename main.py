@@ -21,7 +21,7 @@ genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
 # --- 腦核自動對接程序 ---
 # --- 腦核降級：強制使用極速版避開 10 秒斷電限制 ---
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-1.5-flash-8b')
 def get_gspread_client():
     creds_dict = json.loads(os.getenv('GOOGLE_CREDENTIALS'))
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
