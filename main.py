@@ -1,13 +1,14 @@
 import os
 import json
 import uuid
+import urllib.request
+import urllib.error
 from datetime import datetime, timedelta
 import pytz
 from fastapi import FastAPI, Request, HTTPException
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
-import google.generativeai as genai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -17,11 +18,7 @@ app = FastAPI()
 tz = pytz.timezone('Asia/Taipei')
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
-# --- 腦核自動對接程序 ---
-# --- 腦核降級：強制使用極速版避開 10 秒斷電限制 ---
-model = genai.GenerativeModel('gemini-1.5-flash')
 def get_gspread_client():
     creds_dict = json.loads(os.getenv('GOOGLE_CREDENTIALS'))
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -74,16 +71,28 @@ def handle_text_message(event):
 def process_word_investment(event, word):
     prompt = f"{SYSTEM_PROMPT}\n標的單字：{word}。請以此格式回傳：{{\"sentence\": \"...\", \"cloze\": \"...\", \"warn\": \"...\"}}"
     
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"}
-        )
-        res_data = json.loads(response.text)
-    except Exception as e:
-        # 修正：直接印出底層 API 傳來的真實錯誤，不再呼叫不存在的 response
-        raise ValueError(f"AI 核心呼叫失敗，真實錯誤碼：{str(e)}")
+    # --- 裸連協議：徹底拔除 Google SDK，直接發送底層請求 ---
+    api_key = os.getenv('GEMINI_API_KEY')
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json"}
+    }
     
+    req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers=headers, method='POST')
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            res_text = result['candidates'][0]['content']['parts'][0]['text']
+            res_data = json.loads(res_text)
+    except urllib.error.HTTPError as e:
+        error_msg = e.read().decode('utf-8')
+        raise ValueError(f"API 裸連被拒絕：{e.code} - {error_msg}")
+    except Exception as e:
+         raise ValueError(f"解析失敗：{str(e)}")
+    
+    # --- 寫入資料庫 ---
     client = get_gspread_client()
     sheet = client.open_by_key(os.getenv('SPREADSHEET_ID')).worksheet("Words_Asset")
     now = datetime.now(tz)
@@ -97,7 +106,6 @@ def process_word_investment(event, word):
     
     reply = f"【資產注資成功】\n標的物：{word}\n\n例句：{res_data['sentence']}\n\n系統提示：{res_data.get('warn', '無警告')}"
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-   
 
 def process_progress_report(event, progress_text, maintenance_status):
     client = get_gspread_client()
